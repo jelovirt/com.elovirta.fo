@@ -1,0 +1,183 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns:dita="http://dita-ot.sourceforge.net"
+         xmlns:if="ant:if"
+         xmlns:unless="ant:unless">
+
+  <target name="dita2fo"
+          depends="dita2fo.init,
+                   build-init,
+                   preprocess2,
+                   map2fo,
+                   topic2fo"/>
+
+  <target name="dita2fo.init">
+    <dita-ot-fail id="DOTA066F">
+      <condition>
+        <and>
+          <isset property="args.xsl.pdf"/>
+          <not>
+            <available file="${args.xsl.pdf}" type="file"/>
+          </not>
+        </and>
+      </condition>
+      <param name="1" location="${args.xsl.pdf}"/>
+    </dita-ot-fail>
+    <condition property="temp.transformation.file" value="${dita.plugin.com.elovirta.fo.dir}/xsl/topic2fo_shell_axf.xsl">
+      <and>
+        <not><isset property="args.xsl.pdf"/></not>
+        <equals arg1="${pdf.formatter}" arg2="ah"/>
+      </and>
+    </condition>
+    <condition property="temp.transformation.file" value="${dita.plugin.com.elovirta.fo.dir}/xsl/topic2fo_shell_fop.xsl">
+      <and>
+        <not><isset property="args.xsl.pdf"/></not>
+        <equals arg1="${pdf.formatter}" arg2="fop"/>
+      </and>
+    </condition>
+    <condition property="temp.transformation.file" value="${dita.plugin.com.elovirta.fo.dir}/xsl/topic2fo_shell_xep.xsl">
+      <and>
+        <not><isset property="args.xsl.pdf"/></not>
+        <equals arg1="${pdf.formatter}" arg2="fop"/>
+      </and>
+    </condition>
+
+    <property name="preprocess.copy-image.skip" value="true"/>
+    <property name="clean-preprocess.use-result-filename" value="false"/>
+    <condition property="preprocess.chunk.skip" value="true">
+      <isfalse value="${org.dita.pdf2.chunk.enabled}"/>
+    </condition>
+    <property name="args.rellinks" value="nofamily"/>
+  </target>
+
+  <!-- Common for topic and map -->
+  <target name="transform.topic2xsl-fo.init">
+    <property name="pdf2.temp.dir" value="${dita.temp.dir}"/>
+
+    <property name="customization.dir" location="${dita.plugin.org.dita.pdf2.dir}/Customization"/>
+    <property file="${customization.dir}/build.properties"/>
+
+    <condition property="pdf2.i18n.skip" value="true">
+      <and>
+        <isset property="org.dita.pdf2.i18n.enabled"/>
+        <isfalse value="${org.dita.pdf2.i18n.enabled}"/>
+      </and>
+    </condition>
+
+    <loadfile property="default.locale">
+      <string>${default.language}</string>
+      <filterchain>
+        <tokenfilter>
+          <replaceregex pattern="-" replace="_" flags="gi"/>
+        </tokenfilter>
+      </filterchain>
+    </loadfile>
+
+    <property name="lib.dir" value="${dita.dir}/lib"/>
+    <property name="fo.lib.dir" value="${dita.plugin.org.dita.pdf2.dir}/lib"/>
+    <property name="merged.file" value="${dita.map.filename.root}_MERGED.xml"/>
+
+    <property name="pdf.formatter" value="fop"/>
+
+    <property name="artwork.dir" value="${dita.output.dir}"/>
+    <property name="artworkPrefixUrl" value=""/>
+
+    <condition property="file.protocol.prefix" value="file://">
+      <os family="unix"/>
+    </condition>
+    <property name="file.protocol.prefix" value="file:/"/>
+
+    <path id="xml.catalog.path">
+      <pathelement location="${customization.dir}/catalog.xml"/>
+      <pathelement location="${dita.plugin.org.dita.pdf2.dir}/cfg/catalog.xml"/>
+      <pathelement location="${dita.plugin.org.dita.base.dir}/catalog-dita.xml"/>
+    </path>
+    <xmlcatalog id="xml.catalog">
+      <catalogpath refid="xml.catalog.path"/>
+    </xmlcatalog>
+    <!-- Deprecated since 3.1 -->
+    <pathconvert property="xml.catalog.files" refid="xml.catalog.path"/>
+
+    <property name="xsl.dir" value="${dita.plugin.org.dita.pdf2.dir}/xsl"/>
+    <property name="xsl.fo.dir" value="${dita.plugin.org.dita.pdf2.dir}/xsl/fo"/>
+    <property name="xsl.common.dir" value="${dita.plugin.org.dita.pdf2.dir}/xsl/common"/>
+    <property name="cfg.dir" value="${dita.plugin.org.dita.pdf2.dir}/cfg"/>
+    <property name="cfg.fo.dir" value="${dita.plugin.org.dita.pdf2.dir}/cfg/fo"/>
+    <property name="cfg.common.dir" value="${dita.plugin.org.dita.pdf2.dir}/cfg/common"/>
+
+    <path id="project.class.path">
+      <pathelement path="${java.class.path}"/>
+      <pathelement location="${fo.lib.dir}/fo.jar"/>
+    </path>
+  </target>
+
+  <!-- ====================== TOPIC ====================== -->
+
+  <target name="topic2fo" if="noMap">
+    <antcall target="publish.topic.fo"/>
+  </target>
+
+  <target name="publish.topic.fo"
+    depends="transform.topic2xsl-fo.init,
+                   publish.topic.fo.init"/>
+  <target name="publish.topic.fo.init">
+    <property name="inputFile" location="${dita.temp.dir}/${user.input.file}"/>
+    <!-- Deprecated since 3.0. Use args.output.base instead -->
+    <condition property="outputFile.base" value="${args.output.base}"
+      else="${dita.topic.filename.root}">
+      <isset property="args.output.base"/>
+    </condition>
+    <property name="artworkPrefix" value="${artwork.dir}"/>
+    <antcall target="transform.topic2xsl-fo" inheritrefs="true"/>
+  </target>
+
+  <!-- ====================== MAP ====================== -->
+
+  <target name="map2fo" unless="noMap">
+    <dirname property="dita.temp.dir.fullpath" file="${dita.temp.dir}${file.separator}dummy.file"/>
+    <pipeline message="topicmerge" taskname="topic-merge"
+      inputmap="${dita.temp.dir.fullpath}${file.separator}${user.input.file}">
+      <module class="org.dita.dost.module.TopicMergeModule">
+        <param name="output"
+          location="${dita.temp.dir.fullpath}${file.separator}${dita.map.filename.root}_MERGED.xml"/>
+        <param name="style" location="${dita.plugin.org.dita.pdf2.dir}/xsl/common/topicmerge.xsl"/>
+      </module>
+    </pipeline>
+    <antcall target="publish.map.fo"/>
+  </target>
+
+  <target name="publish.map.fo"
+    depends="transform.topic2xsl-fo.init,
+                   publish.map.fo.init"/>
+
+  <target name="publish.map.fo.init">
+    <property name="inputFile" location="${dita.temp.dir}/${merged.file}"/>
+    <!-- Deprecated since 3.0. Use args.output.base instead -->
+    <condition property="outputFile.base" value="${args.output.base}"
+      else="${dita.map.filename.root}">
+      <isset property="args.output.base"/>
+    </condition>
+    <property name="artworkPrefix" value="${artwork.dir}"/>
+    <antcall target="transform.topic2xsl-fo" inheritrefs="true"/>
+  </target>
+
+  <!-- ====================== COMMON ====================== -->
+
+  <target name="transform.topic2xsl-fo"
+          depends="copyCoreArtwork,
+                   transform.topic2fo,
+                   fo.copy-image">
+    <local name="outputFile"/>
+    <property name="outputFile" location="${dita.output.dir}/${outputFile.base}.fo"/>
+    <mkdir dir="${dita.output.dir}"/>
+    <copy file="${pdf2.temp.dir}/topic.fo" tofile="${outputFile}"/>    
+  </target>
+  
+  <target name="fo.copy-image" description="Copy image files">
+    <copy todir="${dita.output.dir}" failonerror="false">
+      <ditafileset format="image"/>
+      <jobmapper type="temp"/>
+    </copy>
+  </target>
+  
+
+</project>
