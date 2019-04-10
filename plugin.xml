@@ -4,5 +4,4 @@
   <transtype name="fo" extends="pdf" desc="FO"/>
   <feature extension="dita.transtype.print" value="fo"/>
   <feature extension="ant.import" file="build.xml"/>
-  <template file="build_template.xml"/>
 </plugin>
